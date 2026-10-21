@@ -1,6 +1,6 @@
 {
   "timezone": "America/New_York",
-  "location": { "city": "REPLACE_WITH_YOUR_CITY" },
+  "location": { "city": "Wilmington, DE" },
   "people": [
     { "name": "Kevin",    "calendars": ["Kevin"] },
     { "name": "Michelle", "calendars": ["Michelle"] },
