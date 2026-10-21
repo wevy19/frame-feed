@@ -8,6 +8,7 @@ import datetime as dt
 import json
 import os
 import random
+import socket
 import sys
 import urllib.error
 import urllib.parse
@@ -84,8 +85,8 @@ def album_host(tok):
         return "p01-sharedstreams.icloud.com"
 
 
-def post_json(host, tok, path, body):
-    """POST to the shared-album service; follow the 330 'use this host' reply once."""
+def _post(host, tok, path, body):
+    """One POST; follow Apple's 330 'use this host' reply once."""
     for _ in range(2):
         url = "https://%s/%s/sharedstreams/%s" % (host, tok, path)
         req = urllib.request.Request(url, data=json.dumps(body).encode(),
@@ -103,6 +104,24 @@ def post_json(host, tok, path, body):
                     continue
             raise
     raise RuntimeError("album host redirect loop")
+
+
+def post_json(host, tok, path, body):
+    """Try the guessed server first, then p01..p99, skipping names that do not exist."""
+    seen = set()
+    for h in [host] + ["p%02d-sharedstreams.icloud.com" % n for n in range(1, 100)]:
+        if h in seen:
+            continue
+        seen.add(h)
+        try:
+            return _post(h, tok, path, body)
+        except urllib.error.HTTPError:
+            raise
+        except urllib.error.URLError as e:
+            if isinstance(e.reason, socket.gaierror):
+                continue          # that server name does not exist; try the next
+            raise
+    raise RuntimeError("no album server answered")
 
 
 def pick_derivative(derivs):
@@ -149,7 +168,7 @@ def photos(limit=60):
             u = urls.get(checksum)
             if u and u.get("url_location") and u.get("url_path"):
                 out.append({"src": "https://" + u["url_location"] + u["url_path"], "caption": caption})
-        print("album: %d photos" % len(out))
+        print("album: %d photos (server %s)" % (len(out), host))
         return out or None
     except Exception as e:
         print("album failed:", repr(e), file=sys.stderr)
