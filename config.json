@@ -1,0 +1,9 @@
+{
+  "timezone": "America/New_York",
+  "location": { "city": "REPLACE_WITH_YOUR_CITY" },
+  "people": [
+    { "name": "Kevin",    "calendars": ["REPLACE_WITH_CALENDAR_NAME"] },
+    { "name": "Michelle", "calendars": ["REPLACE_WITH_CALENDAR_NAME"] },
+    { "name": "Brayden",  "calendars": ["REPLACE_WITH_CALENDAR_NAME"] }
+  ]
+}
