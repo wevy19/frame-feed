@@ -26,7 +26,6 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           FEED_TOKEN: ${{ secrets.FEED_TOKEN }}
-          ALBUM_URL: ${{ secrets.ALBUM_URL }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
