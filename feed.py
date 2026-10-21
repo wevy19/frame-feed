@@ -7,10 +7,7 @@ Only titles and times are published. No locations, notes or attendees.
 import datetime as dt
 import json
 import os
-import random
-import socket
 import sys
-import urllib.error
 import urllib.parse
 import urllib.request
 from zoneinfo import ZoneInfo
@@ -61,119 +58,6 @@ def weather():
     except Exception as e:
         print("weather failed:", e, file=sys.stderr)
         return None
-
-B62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-
-
-def album_token(url):
-    """The token is the part of the share link after '#'."""
-    tok = url.strip().split("#")[-1].split("/")[-1]
-    if not tok:
-        raise ValueError("no album token in link")
-    return tok
-
-
-def album_host(tok):
-    """Best guess at which Apple server holds the album (a 330 reply corrects it)."""
-    try:
-        if tok[0] == "A":
-            n = B62.index(tok[1])
-        else:
-            n = B62.index(tok[1]) * 62 + B62.index(tok[2])
-        return "p%02d-sharedstreams.icloud.com" % n
-    except Exception:
-        return "p01-sharedstreams.icloud.com"
-
-
-def _post(host, tok, path, body):
-    """One POST; follow Apple's 330 'use this host' reply once."""
-    for _ in range(2):
-        url = "https://%s/%s/sharedstreams/%s" % (host, tok, path)
-        req = urllib.request.Request(url, data=json.dumps(body).encode(),
-                                     headers={"Content-Type": "application/json",
-                                              "User-Agent": "frame-feed"}, method="POST")
-        try:
-            with urllib.request.urlopen(req, timeout=30) as r:
-                return host, json.load(r)
-        except urllib.error.HTTPError as e:
-            if e.code == 330:
-                data = json.loads(e.read().decode() or "{}")
-                new = data.get("X-Apple-MMe-Host")
-                if new and new != host:
-                    host = new
-                    continue
-            raise
-    raise RuntimeError("album host redirect loop")
-
-
-def post_json(host, tok, path, body):
-    """Try the guessed server first, then p01..p99, skipping names that do not exist."""
-    seen = set()
-    for h in [host] + ["p%02d-sharedstreams.icloud.com" % n for n in range(1, 100)]:
-        if h in seen:
-            continue
-        seen.add(h)
-        try:
-            return _post(h, tok, path, body)
-        except urllib.error.HTTPError:
-            raise
-        except urllib.error.URLError as e:
-            if isinstance(e.reason, socket.gaierror):
-                continue          # that server name does not exist; try the next
-            raise
-    raise RuntimeError("no album server answered")
-
-
-def pick_derivative(derivs):
-    """Smallest picture at least ~1000 px wide, else the biggest one available."""
-    rows = []
-    for key, d in (derivs or {}).items():
-        try:
-            w = int(d.get("width") or key)
-        except Exception:
-            continue
-        rows.append((w, d))
-    if not rows:
-        return None
-    rows.sort(key=lambda x: x[0])
-    for w, d in rows:
-        if w >= 1000:
-            return d
-    return rows[-1][1]
-
-
-def photos(limit=60):
-    url = os.environ.get("ALBUM_URL", "").strip()
-    if not url:
-        return None
-    try:
-        tok = album_token(url)
-        host, stream = post_json(album_host(tok), tok, "webstream", {"streamCtag": None})
-        items = []
-        for ph in stream.get("photos", []):
-            if ph.get("mediaAssetType") == "video":
-                continue
-            d = pick_derivative(ph.get("derivatives"))
-            if d and d.get("checksum") and ph.get("photoGuid"):
-                items.append((ph["photoGuid"], d["checksum"], str(ph.get("caption") or "")[:60]))
-        random.Random(dt.date.today().toordinal()).shuffle(items)
-        items = items[:limit]
-        if not items:
-            print("album: no photos found", file=sys.stderr)
-            return None
-        host, assets = post_json(host, tok, "webasseturls", {"photoGuids": [i[0] for i in items]})
-        urls = assets.get("items", {})
-        out = []
-        for guid, checksum, caption in items:
-            u = urls.get(checksum)
-            if u and u.get("url_location") and u.get("url_path"):
-                out.append({"src": "https://" + u["url_location"] + u["url_path"], "caption": caption})
-        print("album: %d photos (server %s)" % (len(out), host))
-        return out or None
-    except Exception as e:
-        print("album failed:", repr(e), file=sys.stderr)
-        return None
-
 
 def to_local(v):
     """Return (date, 'HH:MM' or '') in the family's time zone."""
@@ -236,9 +120,6 @@ def main():
         people.append({"name": p["name"], "events": events_for(cals, start, end)})
     feed = {"generatedAt": dt.datetime.now(dt.timezone.utc).isoformat(),
             "weather": weather(), "people": people}
-    pics = photos()
-    if pics:
-        feed["photos"] = pics
     folder = os.path.join(HERE, "site", os.environ["FEED_TOKEN"])
     os.makedirs(folder, exist_ok=True)
     json.dump(feed, open(os.path.join(folder, "frame.json"), "w"), separators=(",", ":"))
